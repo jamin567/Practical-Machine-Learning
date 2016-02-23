@@ -2,7 +2,7 @@
 title: "Week4 Project"
 author: "Kyu Cho"
 date: "February 18, 2016"
-output: pdf_document
+output: html_document
 keep_md: yes
 ---
 
@@ -28,7 +28,7 @@ You should create a report describing
 4. why you made the choices you did.  
 
 
-```{r hide = T, warning = F, cache = T}
+```{r hide = T, echo = F, warning = F, cache = T}
 library(caret) # ML
 library(randomForest) # rf
 library(e1071) # svm
@@ -84,22 +84,23 @@ cv.kfold <- function(data.df) {
           pca.train <- data.df[-idx,]
           pca.test <- data.df[idx,]
           
-          # gxboost
-#           train.sparse <- sparse.model.matrix(classe ~ ., data = pca.train)
-#           test.sparse <- sparse.model.matrix(~ ., data = pca.test)
-#           trainMatrix <- xgb.DMatrix(data = train.sparse, 
-#                                      label = as.numeric(pca.train$classe) - 1, missing = NA)
-#           testMatrix <- xgb.DMatrix(data = test.sparse)
-#           mdl.cv <- xgb.train(data = trainMatrix, params = param, nrounds = 60)
-#           pred <- as.numeric(predict(mdl.cv, testMatrix)) + 1
-#           acc.cv <- confusionMatrix(pred, pca.test$classe)$overall["Accuracy"]
+          # xgboost
+           train.sparse <- sparse.model.matrix(classe ~ ., data = pca.train)
+           test.sparse <- sparse.model.matrix(~ ., data = pca.test)
+           trainMatrix <- xgb.DMatrix(data = train.sparse, 
+                                      label = as.numeric(pca.train$classe) - 1, missing = NA)
+           testMatrix <- xgb.DMatrix(data = test.sparse)
+           
+           mdl.cv <- xgb.train(data = trainMatrix, params = param, nrounds = 60)
+           pred <- as.numeric(predict(mdl.cv, testMatrix)) + 1
+           acc.cv <- confusionMatrix(pred, pca.test$classe)$overall["Accuracy"]
           
           # K-nearest neighbor
-          mdl.knn <- knn(train = pca.train[ ,predictors], 
-                         test = pca.test[ ,predictors], 
-                         cl = pca.train[ ,target], k=5)
-          pred.knn <- mdl.knn
-          acc.cv <- confusionMatrix(pred.knn, pca.test$classe)$overall["Accuracy"]
+#          mdl.knn <- knn(train = pca.train[ ,predictors], 
+#                         test = pca.test[ ,predictors], 
+#                         cl = pca.train[ ,target], k=5)
+#          pred.knn <- mdl.knn
+#          acc.cv <- confusionMatrix(pred.knn, pca.test$classe)$overall["Accuracy"]
           
           acc.total <- c(acc.total, acc.cv)
      }
@@ -127,7 +128,7 @@ After studying the summary of the training data, a number of cleaning actions ar
 - Convert class into factor 
 
 ```{r hide = T, warning = F, cache = T}
-# Remove not relevant columns for classification (x, user_name, raw time stamp 1  and 2, "new_window" and "num_window")
+# Remove not relevant columns for classification
 col.remove <- c("raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp")
 train <- train[,!(names(train) %in% col.remove)]
 
@@ -212,8 +213,8 @@ test.pca <- high.cor.test
 # Finding the best set of features by using CV
 min = 20     # Chance this value
 max = ncol(train.pca)
-acc.total <- c()
 iterators <- seq(min, max, 1)
+acc.total <- c()
 for (i in iterators) { 
      pre.proc.obj <- preProcess(train.pca, method = c("pca", "center", "scale") , pcaComp = i)
      train.pca.scaled <- predict(pre.proc.obj, train.pca)
@@ -242,7 +243,7 @@ Then we will decide the number of features to be dropped by using cross-validati
 # xgboost (Extreme Gradient Boosting)
 # xgboost only takes matrix input, so we need some cleaning
 train.sparse.tf <- sparse.model.matrix(classe ~ ., data = train.tf)
-train.mtx <- xgb.DMatrix(data = train.sparse.tf, label = as.numeric(train.tf$classe) - 1, missing=NA)
+train.mtx <- xgb.DMatrix(data = train.sparse.tf, label = as.numeric(train.tf$classe) - 1, missing = NA)
 
 param <- list(
      objective = "multi:softmax",     # multiclass classification 
@@ -301,8 +302,7 @@ target <- c('classe')
 predictors <- setdiff(names(train.scaled), target)
 
 # Feature Plot (sclaed, normalized)
-# featurePlot(train.scaled[,predictors], 
-#             train.scaled$classe, "strip")
+featurePlot(train.scaled[,predictors], train.scaled$classe, "strip")
 
 
 # Correlation Plot (highly correlated features are removed)
@@ -513,3 +513,4 @@ write.submission = function(x){
 write.submission(pred.final)
 ```
 
+![alt text](./ans.png)
