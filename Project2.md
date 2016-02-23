@@ -25,21 +25,6 @@ You should create a report describing
 
 
 
-```r
-library(caret) # ML
-library(randomForest) # rf
-library(e1071) # svm
-library(class) # knn
-library(ipred) # bag
-library(xgboost) #xgboost
-library(nnet) # nnet
-library(rFerns) #rFern
-library(Rtsne) # 2d visualization
-library(corrplot) # feature plot
-library(Matrix)
-library(parallel)
-library(doParallel)
-```
 
 
 ## Cross-Validation Function
@@ -82,22 +67,24 @@ cv.kfold <- function(data.df) {
           pca.train <- data.df[-idx,]
           pca.test <- data.df[idx,]
           
-          # gxboost
-          train.sparse <- sparse.model.matrix(classe ~ ., data = pca.train)
-          test.sparse <- sparse.model.matrix(~ ., data = pca.test)
-          trainMatrix <- xgb.DMatrix(data = train.sparse, 
-                                     label = as.numeric(pca.train$classe) - 1, missing = NA)
-          testMatrix <- xgb.DMatrix(data = test.sparse)
-          mdl.cv <- xgb.train(data = trainMatrix, params = param, nrounds = 60)
-          pred <- as.numeric(predict(mdl.cv, testMatrix)) + 1
-          acc.cv <- confusionMatrix(pred, pca.test$classe)$overall["Accuracy"]
+          # xgboost
+           train.sparse <- sparse.model.matrix(classe ~ ., data = pca.train)
+           test.sparse <- sparse.model.matrix(~ ., data = pca.test)
+           trainMatrix <- xgb.DMatrix(data = train.sparse, 
+                                      label = as.numeric(pca.train$classe) - 1, missing = NA)
+           testMatrix <- xgb.DMatrix(data = test.sparse)
+           
+           mdl.cv <- xgb.train(data = trainMatrix, params = param, nrounds = 60)
+           pred <- as.numeric(predict(mdl.cv, testMatrix)) + 1
+           acc.cv <- confusionMatrix(pred, pca.test$classe)$overall["Accuracy"]
           
           # K-nearest neighbor
-#           mdl.knn <- knn(train = pca.train[ ,predictors], 
-#                          test = pca.test[ ,predictors], 
-#                          cl = pca.train[ ,target], k=5)
-#           pred.knn <- mdl.knn
-#           acc.cv <- confusionMatrix(pred.knn, pca.test$classe)$overall["Accuracy"]
+#          mdl.knn <- knn(train = pca.train[ ,predictors], 
+#                         test = pca.test[ ,predictors], 
+#                         cl = pca.train[ ,target], k=5)
+#          pred.knn <- mdl.knn
+#          acc.cv <- confusionMatrix(pred.knn, pca.test$classe)$overall["Accuracy"]
+          
           acc.total <- c(acc.total, acc.cv)
      }
      return(mean(acc.total))
@@ -126,7 +113,7 @@ After studying the summary of the training data, a number of cleaning actions ar
 
 
 ```r
-# Remove not relevant columns for classification (x, user_name, raw time stamp 1  and 2, "new_window" and "num_window")
+# Remove not relevant columns for classification
 col.remove <- c("raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp")
 train <- train[,!(names(train) %in% col.remove)]
 
@@ -180,8 +167,7 @@ preproc.train <- preProcess(low.cor.train, method = c("center", "scale"))
 train.scaled <- predict(preproc.train, low.cor.train)
 train.scaled  <- cbind(train.dummies, train.scaled)
 
-preproc.test <- preProcess(low.cor.test, method = c("center", "scale"))
-test.scaled <- predict(preproc.test, low.cor.test)
+test.scaled <- predict(preproc.train, low.cor.test)
 test.scaled  <- cbind(test.dummies, test.scaled)
 
 
@@ -213,8 +199,8 @@ test.pca <- high.cor.test
 # Finding the best set of features by using CV
 min = 20     # Chance this value
 max = ncol(train.pca)
-acc.total <- c()
 iterators <- seq(min, max, 1)
+acc.total <- c()
 for (i in iterators) { 
      pre.proc.obj <- preProcess(train.pca, method = c("pca", "center", "scale") , pcaComp = i)
      train.pca.scaled <- predict(pre.proc.obj, train.pca)
@@ -260,7 +246,7 @@ Then we will decide the number of features to be dropped by using cross-validati
 # xgboost (Extreme Gradient Boosting)
 # xgboost only takes matrix input, so we need some cleaning
 train.sparse.tf <- sparse.model.matrix(classe ~ ., data = train.tf)
-train.mtx <- xgb.DMatrix(data = train.sparse.tf, label = as.numeric(train.tf$classe) - 1, missing=NA)
+train.mtx <- xgb.DMatrix(data = train.sparse.tf, label = as.numeric(train.tf$classe) - 1, missing = NA)
 
 param <- list(
      objective = "multi:softmax",     # multiclass classification 
@@ -292,22 +278,24 @@ xgb.plot.importance(imp.var.mtx)
 ```r
 # Removing unnecessary features by using CV
 acc.total2 <- c()
-iterators2 <- seq(0.002, 0.006, by = 0.002)
+iterators2 <- seq(0.002, 0.010, by = 0.002)
 for (i in iterators2) {
      col.remove <- subset(imp.var.mtx, imp.var.mtx$Gain < i)$Feature
      train.cv.prned <- train.tf[,!(names(train.tf) %in% col.remove)]
-     acc.total2 <- c(acc.total2, cv.kfold(train.cv))
+     acc.total2 <- c(acc.total2, cv.kfold(train.cv.prned))
 }
-result.prund <- cbind(iterators2, acc.total)
-result.df2 <- result.prund[order(-result.prund[, "acc.total"]),] 
+result.prund <- cbind(iterators2, acc.total2)
+result.df2 <- result.prund[order(-result.prund[, "acc.total2"]),] 
 result.df2
 ```
 
 ```
-##      iterators2 acc.total
-## [1,]      0.006 0.9944954
-## [2,]      0.002 0.9939348
-## [3,]      0.004 0.9935780
+##      iterators2 acc.total2
+## [1,]      0.002  0.9944954
+## [2,]      0.004  0.9944954
+## [3,]      0.006  0.9944954
+## [4,]      0.008  0.9944954
+## [5,]      0.010  0.9944954
 ```
 
 ```r
@@ -316,11 +304,12 @@ print(paste("Best threshold for Var Imp :",best.num2))
 ```
 
 ```
-## [1] "Best threshold for Var Imp : 0.006"
+## [1] "Best threshold for Var Imp : 0.002"
 ```
 
 ```r
-train.tf <- train.cv.prned
+col.remove <- subset(imp.var.mtx, imp.var.mtx$Gain < best.num2)$Feature
+train.tf <- train.tf[,!(names(train.tf) %in% col.remove)]
 target <- "classe"
 col.keep <- names(train.tf)[names(train.tf) != target]
 test.tf <- test.tf[,col.keep]
@@ -339,8 +328,7 @@ target <- c('classe')
 predictors <- setdiff(names(train.scaled), target)
 
 # Feature Plot (sclaed, normalized)
-featurePlot(train.scaled[,predictors], 
-            train.scaled$classe, "strip")
+featurePlot(train.scaled[,predictors], train.scaled$classe, "strip")
 ```
 
 ![](Project2_files/figure-html/unnamed-chunk-7-1.png)\
@@ -425,7 +413,7 @@ predictions <- foreach(m = 1:10, .combine = cbind) %dopar% {
      
      
      ###########################################################
-     # Building Models 01 with original data
+     # Modeling 01 with original data
      ###########################################################
      # rf (RandomForest)
      mdl.rf <- randomForest(classe ~ ., 
@@ -467,7 +455,7 @@ predictions <- foreach(m = 1:10, .combine = cbind) %dopar% {
      
      
      ###########################################################
-     # Stacking Predictions 01 from testing data
+     # Predicting 01 with testing data then combind prections
      ###########################################################
      pred.rf.test <- predict(mdl.rf, testing)
      pred.svm.test <- predict(mdl.svm, testing)
@@ -481,7 +469,7 @@ predictions <- foreach(m = 1:10, .combine = cbind) %dopar% {
   
      
      ###########################################################
-     # Building Models 02 with combinded tested predictions
+     # Moelding 02 with combinded tested predictions
      ###########################################################
      comb.test.sparse <- sparse.model.matrix(classe ~ ., data = combinedTestData)
      comb.test.mtx <- xgb.DMatrix(data = comb.test.sparse, 
@@ -493,7 +481,7 @@ predictions <- foreach(m = 1:10, .combine = cbind) %dopar% {
      
      
      ###########################################################
-     # Stacking Predictions 02 from validation data
+     # Predicting 02 with validation data then combind prections
      ###########################################################
      pred.rf.val <- predict(mdl.rf, validation)
      pred.svm.val <- predict(mdl.svm, validation)
@@ -506,7 +494,7 @@ predictions <- foreach(m = 1:10, .combine = cbind) %dopar% {
      
      
      ###########################################################
-     # Building Models 02 with combinded validated precitions
+     # Prediction 03 with combined validation data for the final
      ###########################################################
      comb.val.sparse <- sparse.model.matrix(~ ., data = combinedValData)
      comb.val.mtx <- xgb.DMatrix(data = comb.val.sparse)
@@ -551,7 +539,7 @@ print(paste(pred.final))
 ```
 
 ```
-##  [1] "B" "A" "A" "A" "D" "E" "D" "B" "A" "A" "B" "C" "D" "A" "E" "D" "A"
+##  [1] "B" "A" "B" "A" "A" "E" "D" "B" "A" "A" "B" "C" "B" "A" "E" "E" "A"
 ## [18] "B" "B" "B"
 ```
 
@@ -567,3 +555,4 @@ write.submission = function(x){
 write.submission(pred.final)
 ```
 
+![alt text](./ans.png)
